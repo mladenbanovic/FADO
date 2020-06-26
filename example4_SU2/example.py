@@ -13,14 +13,20 @@ designparams = copy.deepcopy(config['DV_VALUE_OLD'])
 print(designparams)
 print(len(designparams))
 
-myarr = [1.0, 0.0]
-print(type(myarr))
-print(type(designparams))
-
 var = InputVariable(np.array(designparams),ArrayLabelReplacer("__X__"))
 
 pType_direct = Parameter(["DIRECT"],LabelReplacer("__MATH_PROBLEM__"))
 pType_adjoint = Parameter(["DISCRETE_ADJOINT"],LabelReplacer("__MATH_PROBLEM__"))
+
+from mpi4py import MPI      # use mpi4py for parallel run (also valid for serial)
+mpiComm = MPI.COMM_WORLD
+  
+su2cfdObject = SU2CFDSingleZoneDriverWrapper(config, 1, mpiComm)
+  
+internalDirectRun = InternalRun("DIRECT",su2cfdObject,True)
+internalDirectRun.addConfig("config_tmpl.cfg")
+internalDirectRun.addData("mesh_NACA0012_inv.su2")
+internalDirectRun.addParameter(pType_direct)
 
 directRun = ExternalRun("DIRECT","SU2_CFD config_tmpl.cfg",True)
 directRun.addConfig("config_tmpl.cfg")
@@ -41,7 +47,8 @@ dotProduct.addParameter(pType_adjoint)
 
 fun = Function("DRAG","DIRECT/history_direct.csv",TableReader(0,0,start=(-1,7),end=(None,None),delim=","))
 fun.addInputVariable(var,"DOT/of_grad.dat",TableReader(None,0))
-fun.addValueEvalStep(directRun)
+#fun.addPreProcessStep(preDirectRun)
+fun.addValueEvalStep(internalDirectRun)
 fun.addGradientEvalStep(adjointRun)
 fun.addGradientEvalStep(dotProduct)
 
