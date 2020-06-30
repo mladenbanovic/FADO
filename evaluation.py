@@ -20,6 +20,8 @@ import shutil
 import subprocess as sp
 import abc
 
+import SU2
+
 import pysu2
 import pysu2ad            # imports the SU2 AD wrapped module
 
@@ -253,9 +255,10 @@ class BasePyWrapper(abc.ABC):
 class SU2CFDSingleZoneDriverWrapper(BasePyWrapper):
     def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
         BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
+        print("SU2CFDSingleZoneDriverWrapper constructor")
     
     def preProcess(self):
-        print("Preprocessing step executed")
+        pass
         
     def run(self):
         # Initialize the corresponding driver of SU2, this includes solver preprocessing
@@ -265,7 +268,7 @@ class SU2CFDSingleZoneDriverWrapper(BasePyWrapper):
             SU2Driver = pysu2.CSinglezoneDriver(self._configName, self._nZone, self._mpiComm)
         except TypeError as exception:
             print('A TypeError occured in pysu2.CDriver : ',exception)
-            return
+            raise
           
         # Launch the solver for the entire computation
         SU2Driver.StartSolver()
@@ -277,13 +280,99 @@ class SU2CFDSingleZoneDriverWrapper(BasePyWrapper):
           del SU2Driver
           
     def postProcess(self):
-        print("Additional postprocessing")
+        pass
+      
+class SU2CFDSingleZoneDriverWrapperWithRestartOption(SU2CFDSingleZoneDriverWrapper):
+    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
+        SU2CFDSingleZoneDriverWrapper.__init__(self,mainConfig,nZone,mpiComm)
+        self._numberOfSuccessfulRuns = 0 #this variable will be used to indicate whether the restart option in config should be YES or NO
+    def preProcess(self):
+        #by default RESTART_SOL=NO as on the initial step we don't have prior information
+        #after the first iteration, this should be changed to YES
+        if self._numberOfSuccessfulRuns > 0:
+              #we are already in DIRECT folder, fetch the config and change the RESTART_SOL parameter
+              config = SU2.io.Config(self._configName)
+              config['RESTART_SOL'] = 'YES'
+              self.config.dump(self._configName)
+    
+    def postProcess(self):
+        self._numberOfSuccessfulRuns += 1
+
+class SU2CFDDiscAdjSingleZoneDriverWrapper(BasePyWrapper):
+    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
+        BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
+        print("SU2CFDDiscAdjSingleZoneDriverWrapper constructor")
+    
+    def preProcess(self):
+        #here one has to rename restart file to solution file that the adjoint solver can use
+        #RESTART TO SOLUTION
+        restart  = self._mainConfObject.RESTART_FILENAME
+        solution = self._mainConfObject.SOLUTION_FILENAME
+        if os.path.exists(restart):
+            shutil.move( restart , solution )
+        
+    def run(self):
+        # Initialize the corresponding driver of SU2, this includes solver preprocessing
+        try:
+            SU2Driver = pysu2ad.CDiscAdjSinglezoneDriver(self._configName, self._nZone, self._mpiComm)
+        except TypeError as exception:
+            print('A TypeError occured in pysu2.CDriver : ',exception)
+            raise
+          
+        # Launch the solver for the entire computation
+        SU2Driver.StartSolver()
+        
+        # Postprocess the solver and exit cleanly
+        SU2Driver.Postprocessing()
+        
+        if SU2Driver != None:
+          del SU2Driver
+          
+    def postProcess(self):
+        pass
+
+class SU2DotProductWrapper(BasePyWrapper):
+    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
+        BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
+        print("SU2DotProductWrapper constructor")
+    
+    def preProcess(self):
+        #RESTART TO SOLUTION
+        restart  = self._mainConfObject.RESTART_ADJ_FILENAME
+        solution = self._mainConfObject.SOLUTION_ADJ_FILENAME
+        # add suffix
+        func_name = self._mainConfObject.OBJECTIVE_FUNCTION
+        suffix    = SU2.io.get_adjointSuffix(func_name)
+        restart   = SU2.io.add_suffix(restart,suffix)
+        solution  = SU2.io.add_suffix(solution,suffix)
+        
+        if os.path.exists(restart):
+            shutil.move( restart , solution )
+        
+    def run(self):
+        # Initialize the corresponding driver of SU2, this includes solver preprocessing
+        try:
+            SU2DotProduct = pysu2ad.CGradientProjection(self._configName, self._mpiComm)
+        except TypeError as exception:
+            print('A TypeError occured in pysu2ad.CGradientProjection : ',exception)
+            raise
+          
+        # Launch the dot product
+        SU2DotProduct.Run()
+        
+        if SU2DotProduct != None:
+          del SU2DotProduct
+          
+    def postProcess(self):
+        pass
 
 class InternalRun:
     """
     Defines the execution of an internal code via pywrappers.
     """
     def __init__(self,dir,pywrapperObject,useSymLinks=False):
+        if not isinstance(pywrapperObject, BasePyWrapper):
+            raise TypeError('Expected instance of BasePyWrapper; got %s' % type(pywrapperObject).__name__)
         self._dataFiles = []
         self._confFiles = []
         self._expectedFiles = []
@@ -399,13 +488,18 @@ class InternalRun:
             preExecutionDir = os.getcwd()
             #change to workDir
             os.chdir(self._workDir)
+            #execute preProcess
+            self._pywrapperObject.preProcess()
+            #execute run method
             self._pywrapperObject.run()
+            #execute postProcess
+            self._pywrapperObject.postProcess()
             #after run is executed, go back
             os.chdir(preExecutionDir)
             self._retcode = 1
         except TypeError as exception:
             self._retcode = -1
-            print('A TypeError occured in pysu2.CDriver : ',exception)
+            print('A TypeError occured: ',exception)
             
         self._numTries += 1
 
