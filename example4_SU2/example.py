@@ -14,20 +14,33 @@ designparams = copy.deepcopy(config['DV_VALUE_OLD'])
 print(designparams)
 print(len(designparams))
 
+#ffd = InputVariable(0.0,PreStringHandler("DV_VALUE= "),9,1.0,-15.0,15.0)
 var = InputVariable(np.array(designparams),ArrayLabelReplacer("__X__"))
 
 pType_direct = Parameter(["DIRECT"],LabelReplacer("__MATH_PROBLEM__"))
 pType_adjoint = Parameter(["DISCRETE_ADJOINT"],LabelReplacer("__MATH_PROBLEM__"))
+pType_mesh_filename_original = Parameter(["mesh_NACA0012_inv.su2"],LabelReplacer("__MESH_FILENAME__"))
+pType_mesh_filename_deformed = Parameter(["mesh_NACA0012_inv_def.su2"],LabelReplacer("__MESH_FILENAME__"))
 
 from mpi4py import MPI      # use mpi4py for parallel run (also valid for serial)
 mpiComm = MPI.COMM_WORLD
+
+su2MeshDeformationObject = SU2MeshDeformationWrapperSkipFirstIteration(config, 1, mpiComm)
+
+internalMeshDeformationRun = InternalRun("DEFORM",su2MeshDeformationObject,True)
+internalMeshDeformationRun.addConfig("config_tmpl.cfg")
+internalMeshDeformationRun.addData("mesh_NACA0012_inv.su2")
+internalMeshDeformationRun.addParameter(pType_direct)
+internalMeshDeformationRun.addParameter(pType_mesh_filename_original)
+
   
 su2CFDObject = SU2CFDSingleZoneDriverWrapperWithRestartOption(config, 1, mpiComm) #SU2CFDSingleZoneDriverWrapper(config, 1, mpiComm)
   
 internalDirectRun = InternalRun("DIRECT",su2CFDObject,True)
 internalDirectRun.addConfig("config_tmpl.cfg")
-internalDirectRun.addData("mesh_NACA0012_inv.su2")
+internalDirectRun.addData("DEFORM/mesh_NACA0012_inv_def.su2")
 internalDirectRun.addParameter(pType_direct)
+internalDirectRun.addParameter(pType_mesh_filename_deformed)
 
 #directRun = ExternalRun("DIRECT","SU2_CFD config_tmpl.cfg",True)
 #directRun.addConfig("config_tmpl.cfg")
@@ -38,9 +51,10 @@ su2CFDADObject = SU2CFDDiscAdjSingleZoneDriverWrapper(config, 1, mpiComm)
 
 internalAdjointRun = InternalRun("ADJOINT",su2CFDADObject,True)
 internalAdjointRun.addConfig("config_tmpl.cfg")
-internalAdjointRun.addData("mesh_NACA0012_inv.su2")
+internalAdjointRun.addData("DEFORM/mesh_NACA0012_inv_def.su2")
 internalAdjointRun.addData("DIRECT/restart_flow.dat")
 internalAdjointRun.addParameter(pType_adjoint)
+internalAdjointRun.addParameter(pType_mesh_filename_deformed)
 
 #adjointRun = ExternalRun("ADJOINT","SU2_CFD_AD config_tmpl.cfg",True)
 #adjointRun.addConfig("config_tmpl.cfg")
@@ -52,9 +66,10 @@ su2DotProductObject = SU2DotProductWrapper(config, 1, mpiComm)
 
 internalDotProductRun = InternalRun("DOT",su2DotProductObject,True)
 internalDotProductRun.addConfig("config_tmpl.cfg")
-internalDotProductRun.addData("mesh_NACA0012_inv.su2")
+internalDotProductRun.addData("DEFORM/mesh_NACA0012_inv_def.su2")
 internalDotProductRun.addData("ADJOINT/restart_adj_cd.dat")
 internalDotProductRun.addParameter(pType_adjoint)
+internalDotProductRun.addParameter(pType_mesh_filename_deformed)
 
 #dotProduct = ExternalRun("DOT","SU2_DOT_AD config_tmpl.cfg",True)
 #dotProduct.addConfig("config_tmpl.cfg")
@@ -65,6 +80,7 @@ internalDotProductRun.addParameter(pType_adjoint)
 fun = Function("DRAG","DIRECT/history_direct.csv",TableReader(0,0,start=(-1,7),end=(None,None),delim=","))
 fun.addInputVariable(var,"DOT/of_grad.dat",TableReader(None,0,start=(1,0),end=(None,None)))
 #fun.addPreProcessStep(preDirectRun)
+fun.addValueEvalStep(internalMeshDeformationRun)
 fun.addValueEvalStep(internalDirectRun)
 fun.addGradientEvalStep(internalAdjointRun)
 fun.addGradientEvalStep(internalDotProductRun)
@@ -87,5 +103,7 @@ driver.setStorageMode(True)
 
 funcVal = driver.fun(np.array(designparams))
 grad = driver.grad(np.array(designparams))
+
+print ('Finished')
 
 

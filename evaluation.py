@@ -365,6 +365,43 @@ class SU2DotProductWrapper(BasePyWrapper):
           
     def postProcess(self):
         pass
+      
+class SU2MeshDeformationWrapperSkipFirstIteration(BasePyWrapper):
+    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
+        BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
+        print("SU2MeshDeformationWrapperSkipFirstIteration constructor")
+        self._isAlreadyCalledForTheFirstTime = False
+    
+    def preProcess(self):
+        pass
+        
+    def run(self):
+        if self._isAlreadyCalledForTheFirstTime: 
+            try:
+                SU2MeshDeformation = pysu2.CMeshDeformation(self._configName, self._mpiComm)
+            except TypeError as exception:
+                print('A TypeError occured in pysu2ad.CMeshDeformation : ',exception)
+                raise
+          
+            # Launch the mesh deformation
+            SU2MeshDeformation.Run()
+            print ("SU2MeshDeformation successfully evaluated")
+        
+            if SU2MeshDeformation != None:
+              del SU2MeshDeformation
+        else:
+            config = SU2.io.Config(self._configName)
+            mesh_name = config['MESH_FILENAME']
+            mesh_out_name = config['MESH_OUT_FILENAME']
+            if os.path.exists(mesh_name):
+                shutil.copy( mesh_name , mesh_out_name )
+                
+            self._isAlreadyCalledForTheFirstTime = True
+            
+          
+    def postProcess(self):
+        pass
+
 
 class InternalRun:
     """
