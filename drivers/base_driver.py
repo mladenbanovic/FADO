@@ -82,6 +82,10 @@ class DriverBase:
 
         self._userPreProcessFun = ""
         self._userPreProcessGrad = ""
+
+        # define files that should be retrieved to usrDir
+        self._dataFilesToRetrieveAfterValueEval = []
+        self._dataFilesToRetrieveAfterGradientEval = []
     #end
 
     def addObjective(self,type,function,scale=1.0,weight=1.0):
@@ -310,5 +314,11 @@ class DriverBase:
 
         return True
     #end
+    
+    def addDataFileToFetchAfterValueEval(self,fileName):
+        self._dataFilesToRetrieveAfterValueEval.append(fileName)
+    
+    def addDataFileToFetchAfterGradientEval(self,fileName):
+        self._dataFilesToRetrieveAfterGradientEval.append(fileName)
 #end
 

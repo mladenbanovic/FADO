@@ -18,6 +18,7 @@
 import os
 import time
 import subprocess as sp
+import shutil
 from drivers.base_driver import DriverBase
 
 
@@ -222,6 +223,14 @@ class ParallelEvalDriver(DriverBase):
         self._funReady = True
 
         os.chdir(self._userDir)
+        
+        #dirName = self._dirPrefix+str(previousIterationNumber).rjust(3,"0")
+        for file in self._dataFilesToRetrieveAfterValueEval:
+            source = os.path.join(self._workDir,file) #source = os.path.join(self._workDir,os.path.basename(file))
+            target = os.path.basename(file)#target = os.path.join(self._userDir,os.path.basename(file))
+            #shutil.copy()#(shutil.copy,os.symlink)[self._symLinks](os.path.abspath(file),target)
+            #target = os.path.join(self._workDir,os.path.basename(file))
+            shutil.copy(source,target)
 
         return True
     #end

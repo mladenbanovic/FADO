@@ -101,6 +101,9 @@ driver.preprocess()
 driver.setEvaluationMode(False)
 driver.setStorageMode(True)
 
+driver.addDataFileToFetchAfterValueEval("DIRECT/restart_flow.dat")
+driver.addDataFileToFetchAfterGradientEval("ADJOINT/solution_adj_cd.dat")
+
 funcVal = driver.fun(np.array(designparams))
 grad = driver.grad(np.array(designparams))
 
