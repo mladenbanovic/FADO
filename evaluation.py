@@ -290,26 +290,33 @@ class SU2CFDSingleZoneDriverWrapperWithRestartOption(SU2CFDSingleZoneDriverWrapp
         #by default RESTART_SOL=NO as on the initial step we don't have prior information
         #after the first iteration, this should be changed to YES
         if self._numberOfSuccessfulRuns > 0:
-              #we are already in DIRECT folder, fetch the config and change the RESTART_SOL parameter
+              #we are already inside the DIRECT folder, fetch the config and change the RESTART_SOL parameter
               config = SU2.io.Config(self._configName)
               config['RESTART_SOL'] = 'YES'
-              self.config.dump(self._configName)
+              config.dump(self._configName)
     
     def postProcess(self):
         self._numberOfSuccessfulRuns += 1
-
-class SU2CFDDiscAdjSingleZoneDriverWrapper(BasePyWrapper):
-    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
-        BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
-        print("SU2CFDDiscAdjSingleZoneDriverWrapper constructor")
-    
-    def preProcess(self):
         #here one has to rename restart file to solution file that the adjoint solver can use
         #RESTART TO SOLUTION
         restart  = self._mainConfObject.RESTART_FILENAME
         solution = self._mainConfObject.SOLUTION_FILENAME
         if os.path.exists(restart):
             shutil.move( restart , solution )
+        
+
+class SU2CFDDiscAdjSingleZoneDriverWrapper(BasePyWrapper):
+    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
+        BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
+        self._numberOfSuccessfulRuns = 0 #this variable will be used to indicate whether the restart option in config should be YES or NO
+        print("SU2CFDDiscAdjSingleZoneDriverWrapper constructor")
+    
+    def preProcess(self):
+        if self._numberOfSuccessfulRuns > 0:
+              #we are already inside the ADJOINT folder, fetch the config and change the RESTART_SOL parameter
+              config = SU2.io.Config(self._configName)
+              config['RESTART_SOL'] = 'YES'
+              config.dump(self._configName)
         
     def run(self):
         # Initialize the corresponding driver of SU2, this includes solver preprocessing
@@ -329,14 +336,7 @@ class SU2CFDDiscAdjSingleZoneDriverWrapper(BasePyWrapper):
           del SU2Driver
           
     def postProcess(self):
-        pass
-
-class SU2DotProductWrapper(BasePyWrapper):
-    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
-        BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
-        print("SU2DotProductWrapper constructor")
-    
-    def preProcess(self):
+        self._numberOfSuccessfulRuns += 1
         #RESTART TO SOLUTION
         restart  = self._mainConfObject.RESTART_ADJ_FILENAME
         solution = self._mainConfObject.SOLUTION_ADJ_FILENAME
@@ -348,6 +348,14 @@ class SU2DotProductWrapper(BasePyWrapper):
         
         if os.path.exists(restart):
             shutil.move( restart , solution )
+
+class SU2DotProductWrapper(BasePyWrapper):
+    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
+        BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
+        print("SU2DotProductWrapper constructor")
+    
+    def preProcess(self):
+        pass
         
     def run(self):
         # Initialize the corresponding driver of SU2, this includes solver preprocessing

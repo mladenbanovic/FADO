@@ -19,6 +19,7 @@ import os
 import time
 import copy
 import numpy as np
+import shutil
 from drivers.parallel_eval_driver import ParallelEvalDriver
 
 
@@ -200,6 +201,14 @@ class ExteriorPenaltyDriver(ParallelEvalDriver):
 
         # make copy to use as fallback
         self._old_grad[()] = self._grad
+        
+        for file in self._dataFilesToRetrieveAfterGradientEval:
+            source = os.path.join(self._workDir,file) #source = os.path.join(self._workDir,os.path.basename(file))
+            target = os.path.basename(file)#target = os.path.join(self._userDir,os.path.basename(file))
+            #shutil.copy()#(shutil.copy,os.symlink)[self._symLinks](os.path.abspath(file),target)
+            #target = os.path.join(self._workDir,os.path.basename(file))
+            shutil.copy(source,target)
+
     #end
 
     def update(self,paramsIfFeasible=False):

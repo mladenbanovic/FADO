@@ -3,6 +3,7 @@ import SU2
 import scipy.optimize
 import subprocess
 import numpy as np
+from scipy.optimize import fmin_slsqp
 
 #tab = TableReader(0,0,start=(-1,7),end=(None,None),delim=",")
 #functionVal = tab.read("history_direct.csv")
@@ -39,6 +40,7 @@ su2CFDObject = SU2CFDSingleZoneDriverWrapperWithRestartOption(config, 1, mpiComm
 internalDirectRun = InternalRun("DIRECT",su2CFDObject,True)
 internalDirectRun.addConfig("config_tmpl.cfg")
 internalDirectRun.addData("DEFORM/mesh_NACA0012_inv_def.su2")
+internalDirectRun.addData("solution_flow.dat") #on the second iteration it will exist and created by the driver
 internalDirectRun.addParameter(pType_direct)
 internalDirectRun.addParameter(pType_mesh_filename_deformed)
 
@@ -52,7 +54,8 @@ su2CFDADObject = SU2CFDDiscAdjSingleZoneDriverWrapper(config, 1, mpiComm)
 internalAdjointRun = InternalRun("ADJOINT",su2CFDADObject,True)
 internalAdjointRun.addConfig("config_tmpl.cfg")
 internalAdjointRun.addData("DEFORM/mesh_NACA0012_inv_def.su2")
-internalAdjointRun.addData("DIRECT/restart_flow.dat")
+internalAdjointRun.addData("DIRECT/solution_flow.dat")
+internalAdjointRun.addData("solution_adj_cd.dat") #on the second iteration it will exist and created by the driver
 internalAdjointRun.addParameter(pType_adjoint)
 internalAdjointRun.addParameter(pType_mesh_filename_deformed)
 
@@ -67,7 +70,7 @@ su2DotProductObject = SU2DotProductWrapper(config, 1, mpiComm)
 internalDotProductRun = InternalRun("DOT",su2DotProductObject,True)
 internalDotProductRun.addConfig("config_tmpl.cfg")
 internalDotProductRun.addData("DEFORM/mesh_NACA0012_inv_def.su2")
-internalDotProductRun.addData("ADJOINT/restart_adj_cd.dat")
+internalDotProductRun.addData("ADJOINT/solution_adj_cd.dat")
 internalDotProductRun.addParameter(pType_adjoint)
 internalDotProductRun.addParameter(pType_mesh_filename_deformed)
 
@@ -97,16 +100,64 @@ global_factor = float(config['OPT_GRADIENT_FACTOR'])
 sign  = SU2.io.get_objectiveSign(this_obj)
 driver.addObjective("min",fun,sign * scale * global_factor)
 
+driver.addDataFileToFetchAfterValueEval("DIRECT/solution_flow.dat")
+driver.addDataFileToFetchAfterGradientEval("ADJOINT/solution_adj_cd.dat")
+
 driver.preprocess()
 driver.setEvaluationMode(False)
 driver.setStorageMode(True)
 
-driver.addDataFileToFetchAfterValueEval("DIRECT/restart_flow.dat")
-driver.addDataFileToFetchAfterGradientEval("ADJOINT/solution_adj_cd.dat")
+log = open("log.txt","w",1)
+his = open("history.txt","w",1)
+driver.setLogger(log)
+driver.setHistorian(his)
 
-funcVal = driver.fun(np.array(designparams))
-grad = driver.grad(np.array(designparams))
+x  = driver.getInitial()
+#lb = driver.getLowerBound()
+#ub = driver.getUpperBound()
+#bounds = np.array((lb,ub),float).transpose()
+#update_iters = 18
+#max_iters = 1000
+#fin_tol = 1e-7
 
+maxIter      = int (config.OPT_ITERATIONS)                      # number of opt iterations
+bound_upper       = float (config.OPT_BOUND_UPPER)                   # variable bound to be scaled by the line search
+bound_lower       = float (config.OPT_BOUND_LOWER)                   # variable bound to be scaled by the line search
+relax_factor      = float (config.OPT_RELAX_FACTOR)                  # line search scale
+gradient_factor   = float (config.OPT_GRADIENT_FACTOR)               # objective function and gradient scale
+
+accu = float (config.OPT_ACCURACY) * gradient_factor            # optimizer accuracy
+
+xb_low = [float(bound_lower)/float(relax_factor)]*driver._nVar      # lower dv bound it includes the line search acceleration factor
+xb_up  = [float(bound_upper)/float(relax_factor)]*driver._nVar      # upper dv bound it includes the line search acceleration fa
+xbounds = list(zip(xb_low, xb_up)) # design bounds
+
+# scale accuracy
+eps = 1.0e-04
+
+#funcVal = driver.fun(np.array(designparams))
+#grad = driver.grad(np.array(designparams))
+
+outputs = fmin_slsqp( x0             = x       ,
+                      func           = driver.fun   , 
+#                        f_eqcons       = None               , 
+#                        f_ieqcons      = None               ,
+                      fprime         = driver.grad  ,
+#                        fprime_eqcons  = None               , 
+#                        fprime_ieqcons = None               , 
+#                        args           = None               , 
+                      bounds         = xbounds  ,
+                      iter           = maxIter  ,
+                      iprint         = 2                  ,
+                      full_output    = True               ,
+                      acc            = accu     ,
+                      epsilon        = eps      )
+
+#driver.update()
+
+log.close()
+his.close()
+  
 print ('Finished')
 
 
