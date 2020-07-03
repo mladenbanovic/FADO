@@ -49,7 +49,7 @@ internalDirectRun.addParameter(pType_mesh_filename_deformed)
 #directRun.addData("mesh_NACA0012_inv.su2")
 #directRun.addParameter(pType_direct)
 
-su2CFDADObject = SU2CFDDiscAdjSingleZoneDriverWrapper(config, 1, mpiComm)
+su2CFDADObject = SU2CFDDiscAdjSingleZoneDriverWrapperWithRestartOption(config, 1, mpiComm)
 
 internalAdjointRun = InternalRun("ADJOINT",su2CFDADObject,True)
 internalAdjointRun.addConfig("config_tmpl.cfg")

@@ -236,17 +236,15 @@ class BasePyWrapper(abc.ABC):
         self._mpiComm = mpiComm
         print("BaseWrapper constructor")
         
-    @abc.abstractmethod
     def preProcess(self):
-        return NotImplemented
+        pass
     
     @abc.abstractmethod
     def run(self):
         return NotImplemented
     
-    @abc.abstractmethod
     def postProcess(self):
-        return NotImplemented
+        pass
     
     def setMainConfig(self,config):
         self._mainConfObject = config
@@ -255,10 +253,6 @@ class BasePyWrapper(abc.ABC):
 class SU2CFDSingleZoneDriverWrapper(BasePyWrapper):
     def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
         BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
-        print("SU2CFDSingleZoneDriverWrapper constructor")
-    
-    def preProcess(self):
-        pass
         
     def run(self):
         # Initialize the corresponding driver of SU2, this includes solver preprocessing
@@ -278,9 +272,6 @@ class SU2CFDSingleZoneDriverWrapper(BasePyWrapper):
         
         if SU2Driver != None:
           del SU2Driver
-          
-    def postProcess(self):
-        pass
       
 class SU2CFDSingleZoneDriverWrapperWithRestartOption(SU2CFDSingleZoneDriverWrapper):
     def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
@@ -303,20 +294,10 @@ class SU2CFDSingleZoneDriverWrapperWithRestartOption(SU2CFDSingleZoneDriverWrapp
         solution = self._mainConfObject.SOLUTION_FILENAME
         if os.path.exists(restart):
             shutil.move( restart , solution )
-        
 
 class SU2CFDDiscAdjSingleZoneDriverWrapper(BasePyWrapper):
     def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
         BasePyWrapper.__init__(self,"config_tmpl.cfg",mainConfig,nZone,mpiComm)
-        self._numberOfSuccessfulRuns = 0 #this variable will be used to indicate whether the restart option in config should be YES or NO
-        print("SU2CFDDiscAdjSingleZoneDriverWrapper constructor")
-    
-    def preProcess(self):
-        if self._numberOfSuccessfulRuns > 0:
-              #we are already inside the ADJOINT folder, fetch the config and change the RESTART_SOL parameter
-              config = SU2.io.Config(self._configName)
-              config['RESTART_SOL'] = 'YES'
-              config.dump(self._configName)
         
     def run(self):
         # Initialize the corresponding driver of SU2, this includes solver preprocessing
@@ -334,6 +315,19 @@ class SU2CFDDiscAdjSingleZoneDriverWrapper(BasePyWrapper):
         
         if SU2Driver != None:
           del SU2Driver
+    
+
+class SU2CFDDiscAdjSingleZoneDriverWrapperWithRestartOption(SU2CFDDiscAdjSingleZoneDriverWrapper):
+    def __init__(self,mainConfig=None,nZone=1,mpiComm=None):
+        SU2CFDDiscAdjSingleZoneDriverWrapper.__init__(self,mainConfig,nZone,mpiComm)
+        self._numberOfSuccessfulRuns = 0 #this variable will be used to indicate whether the restart option in config should be YES or NO
+    
+    def preProcess(self):
+        if self._numberOfSuccessfulRuns > 0:
+              #we are already inside the ADJOINT folder, fetch the config and change the RESTART_SOL parameter
+              config = SU2.io.Config(self._configName)
+              config['RESTART_SOL'] = 'YES'
+              config.dump(self._configName)
           
     def postProcess(self):
         self._numberOfSuccessfulRuns += 1
