@@ -4,16 +4,14 @@ import scipy.optimize
 import subprocess
 import numpy as np
 from scipy.optimize import fmin_slsqp
+from FADO.su2helpers import pywrapper
 
 #tab = TableReader(0,0,start=(-1,7),end=(None,None),delim=",")
 #functionVal = tab.read("history_direct.csv")
 
 # This is a Python implementation of the config file, should be done with pywrapper in the future
 config = SU2.io.Config("config_CFD.cfg")
-print(config._filename)
 designparams = copy.deepcopy(config['DV_VALUE_OLD'])
-print(designparams)
-print(len(designparams))
 
 #ffd = InputVariable(0.0,PreStringHandler("DV_VALUE= "),9,1.0,-15.0,15.0)
 var = InputVariable(np.array(designparams),ArrayLabelReplacer("__X__"))
@@ -26,7 +24,7 @@ pType_mesh_filename_deformed = Parameter(["mesh_NACA0012_inv_def.su2"],LabelRepl
 from mpi4py import MPI      # use mpi4py for parallel run (also valid for serial)
 mpiComm = MPI.COMM_WORLD
 
-su2MeshDeformationObject = SU2MeshDeformationWrapperSkipFirstIteration(config, 1, mpiComm)
+su2MeshDeformationObject = pywrapper.SU2MeshDeformationWrapperSkipFirstIteration(config, 1, mpiComm)
 
 internalMeshDeformationRun = InternalRun("DEFORM",su2MeshDeformationObject,True)
 internalMeshDeformationRun.addConfig("config_tmpl.cfg")
@@ -35,7 +33,7 @@ internalMeshDeformationRun.addParameter(pType_direct)
 internalMeshDeformationRun.addParameter(pType_mesh_filename_original)
 
   
-su2CFDObject = SU2CFDSingleZoneDriverWrapperWithRestartOption(config, 1, mpiComm) #SU2CFDSingleZoneDriverWrapper(config, 1, mpiComm)
+su2CFDObject = pywrapper.SU2CFDSingleZoneDriverWrapperWithRestartOption(config, 1, mpiComm) #SU2CFDSingleZoneDriverWrapper(config, 1, mpiComm)
   
 internalDirectRun = InternalRun("DIRECT",su2CFDObject,True)
 internalDirectRun.addConfig("config_tmpl.cfg")
@@ -49,7 +47,7 @@ internalDirectRun.addParameter(pType_mesh_filename_deformed)
 #directRun.addData("mesh_NACA0012_inv.su2")
 #directRun.addParameter(pType_direct)
 
-su2CFDADObject = SU2CFDDiscAdjSingleZoneDriverWrapperWithRestartOption(config, 1, mpiComm)
+su2CFDADObject = pywrapper.SU2CFDDiscAdjSingleZoneDriverWrapperWithRestartOption(config, 1, mpiComm)
 
 internalAdjointRun = InternalRun("ADJOINT",su2CFDADObject,True)
 internalAdjointRun.addConfig("config_tmpl.cfg")
@@ -65,7 +63,7 @@ internalAdjointRun.addParameter(pType_mesh_filename_deformed)
 #adjointRun.addData("DIRECT/restart_flow.dat")
 #adjointRun.addParameter(pType_adjoint)
 
-su2DotProductObject = SU2DotProductWrapper(config, 1, mpiComm)
+su2DotProductObject = pywrapper.SU2DotProductWrapper(config, 1, mpiComm)
 
 internalDotProductRun = InternalRun("DOT",su2DotProductObject,True)
 internalDotProductRun.addConfig("config_tmpl.cfg")
