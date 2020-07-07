@@ -237,26 +237,29 @@ class ExternalRun(BaseRun):
 #end
 
 class BasePyWrapper(abc.ABC):
-    def __init__(self,configName="config_tmpl.cfg",mainConfig=None,nZone=1,mpiComm=None):
-        self._configName = configName
-        self._mainConfObject = mainConfig
+    def __init__(self,configName="config_tmpl.cfg",nZone=1,mpiComm=None):
+        self._mainConfigName = configName
         self._nZone = nZone
         self._mpiComm = mpiComm
-        print("BaseWrapper constructor")
+    #end
         
     def preProcess(self):
         pass
+    #end
     
     @abc.abstractmethod
     def run(self):
         return NotImplemented
+    #end
     
     def postProcess(self):
         pass
+    #end
     
-    def setMainConfig(self,config):
-        self._mainConfObject = config
-        print("Config provided")
+    def setMainConfigName(self,configName):
+        self._mainConfigName = configName
+    #end
+#end
 
 
 class InternalRun(BaseRun):
