@@ -1,0 +1,3 @@
+This example corresponds to SU2 Tutorial test-case found under Tutorials/design/Inviscid_2D_Unconstrained_NACA0012
+
+File data.zip contains mesh file and two empty solution files (solution_flow.dat and solution_adj_cd.dat). The solution files are empty on the initial iteration but they will be overwritten during the optimization with the actual information.

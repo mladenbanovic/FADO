@@ -10,7 +10,7 @@ from FADO.su2helpers import pywrapper
 #functionVal = tab.read("history_direct.csv")
 
 # This is a Python implementation of the config file, should be done with pywrapper in the future
-config = SU2.io.Config("config_CFD.cfg")
+config = SU2.io.Config("config_original.cfg")
 designparams = copy.deepcopy(config['DV_VALUE_OLD'])
 
 #ffd = InputVariable(0.0,PreStringHandler("DV_VALUE= "),9,1.0,-15.0,15.0)
