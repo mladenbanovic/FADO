@@ -18,41 +18,47 @@
 import os
 import shutil
 import subprocess as sp
+import abc
+from FADO.evaluation import BaseRun
 
-
-class ExternalRun:
+class BaseRun(abc.ABC):
     """
-    Defines the execution of an external code (managed via Popen).
-    A lazy execution model is used, once run, a new process will not be started
-    until the "lazy" flags are explicitly cleared via "finalize()".
-
+    Defines an abstract class from which ExternalRun and InternalRun (intended for python wrappers) inherit.
+    
     Parameters
     ----------
-    dir         : The subdirectory within which the command will be run.
-    command     : The shell command used to create the external process.
+    dir         : The subdirectory within which a command or a callable object will be executed.
     useSymLinks : If set to True, symbolic links are used for "data" files instead of copies.
     """
-    def __init__(self,dir,command,useSymLinks=False):
+    def __init__(self,workDir,useSymLinks):
         self._dataFiles = []
         self._confFiles = []
         self._expectedFiles = []
-        self._workDir = dir
-        self._command = command
+        self._workDir = workDir
         self._symLinks = useSymLinks
         self._maxTries = 1
         self._numTries = 0
-        self._process = None
         self._variables = set()
         self._parameters = []
         self._stdout = None
         self._stderr = None
         self.finalize()
-
+    #end
+    
+    @abc.abstractmethod
+    def initialize(self):
+        return NotImplemented
+      
+    @abc.abstractmethod
+    def run(self):
+        return NotImplemented
+    
     def _addAbsoluteFile(self,file,flist):
         file = os.path.abspath(file)
         if not os.path.isfile(file):
             raise ValueError("File '"+file+"' not found.")
         flist.append(file)
+    #end
 
     def addData(self,file,location="auto"):
         """
@@ -77,7 +83,7 @@ class ExternalRun:
             #end
         #end
     #end
-
+    
     def addConfig(self,file):
         """Add a "configuration" file to the run, a mutable dependency onto which
         Parameters and Variables are written. The path ("file") is converted
@@ -108,6 +114,52 @@ class ExternalRun:
         users do not need to call it explicitly.
         """
         self._variables.update(variables)
+
+    def isIni(self):
+        """Return True if the run was initialized."""
+        return self._isIni
+
+    def isRun(self):
+        """Return True if the run has finished."""
+        return self._isRun
+
+    def finalize(self):
+        """Reset "lazy" flags, close the stdout and stderr of the process."""
+        try:
+            self._stdout.close()
+            self._stderr.close()
+        except:
+            pass
+        self._isIni = False
+        self._isRun = False
+        self._retcode = -100
+    #end
+
+    # check whether expected files were created
+    def _success(self):
+        for file in self._expectedFiles:
+            if not os.path.isfile(file): return False
+        return True
+    #end
+    
+#end
+
+class ExternalRun(BaseRun):
+    """
+    Defines the execution of an external code (managed via Popen).
+    A lazy execution model is used, once run, a new process will not be started
+    until the "lazy" flags are explicitly cleared via "finalize()".
+
+    Parameters
+    ----------
+    dir         : The subdirectory within which the command will be run.
+    command     : The shell command used to create the external process.
+    useSymLinks : If set to True, symbolic links are used for "data" files instead of copies.
+    """
+    def __init__(self,workDir,command,useSymLinks=False):
+        BaseRun.__init__(self, workDir, useSymLinks)
+        self._command = command
+        self._process = None
 
     def initialize(self):
         """
@@ -186,31 +238,104 @@ class ExternalRun:
 
         return self._retcode
     #end
+#end
 
-    def isIni(self):
-        """Return True if the run was initialized."""
-        return self._isIni
+class BasePyWrapper(abc.ABC):
+    def __init__(self,configName="config_tmpl.cfg",nZone=1,mpiComm=None):
+        self._mainConfigName = configName
+        self._nZone = nZone
+        self._mpiComm = mpiComm
+    #end
+        
+    def preProcess(self):
+        pass
+    #end
+    
+    @abc.abstractmethod
+    def run(self):
+        return NotImplemented
+    #end
+    
+    def postProcess(self):
+        pass
+    #end
+    
+    def setMainConfigName(self,configName):
+        self._mainConfigName = configName
+    #end
+#end
 
-    def isRun(self):
-        """Return True if the run has finished."""
-        return self._isRun
+class InternalRun(BaseRun):
+    """
+    Defines execution of an internal code via pywrappers.
+    """
+    def __init__(self,workDir,pywrapperObject,useSymLinks=False):
+        if not isinstance(pywrapperObject, BasePyWrapper):
+            raise TypeError('Expected instance of BasePyWrapper; got %s' % type(pywrapperObject).__name__)
+        BaseRun.__init__(self, workDir, useSymLinks)
+        self._pywrapperObject = pywrapperObject
 
-    def finalize(self):
-        """Reset "lazy" flags, close the stdout and stderr of the process."""
-        try:
-            self._stdout.close()
-            self._stderr.close()
-        except:
-            pass
-        self._isIni = False
+    def initialize(self):
+        """
+        Initialize the run, create the subdirectory, copy/symlink the data and
+        configuration files, and write the parameters and variables to the latter.
+        """
+        if self._isIni: return
+
+        os.mkdir(self._workDir)
+        for file in self._dataFiles:
+            target = os.path.join(self._workDir,os.path.basename(file))
+            (shutil.copy,os.symlink)[self._symLinks](os.path.abspath(file),target)
+
+        for file in self._confFiles:
+            target = os.path.join(self._workDir,os.path.basename(file))
+            shutil.copy(file,target)
+            for par in self._parameters:
+                par.writeToFile(target)
+            for var in self._variables:
+                var.writeToFile(target)
+
+        self._isIni = True
         self._isRun = False
-        self._retcode = -100
+        self._numTries = 0
     #end
 
-    # check whether expected files were created
-    def _success(self):
-        for file in self._expectedFiles:
-            if not os.path.isfile(file): return False
-        return True
+    def run(self):
+        """Start the process and wait for it to finish."""
+        if not self._isIni:
+            raise RuntimeError("Run was not initialized.")
+        if self._numTries == self._maxTries:
+            raise RuntimeError("Run failed.")
+        if self._isRun:
+            return self._retcode
+        
+        try:
+            preExecutionDir = os.getcwd()
+            #change to workDir
+            os.chdir(self._workDir)
+            #execute preProcess
+            self._pywrapperObject.preProcess()
+            #execute run method
+            self._pywrapperObject.run()
+            #execute postProcess
+            self._pywrapperObject.postProcess()
+            #after run is executed, go back
+            os.chdir(preExecutionDir)
+            self._retcode = 1
+        except TypeError as exception:
+            self._retcode = -1
+            print('A TypeError occured: ',exception)
+            
+        self._numTries += 1
+
+        if not self._success():
+            self.finalize()
+            self._isIni = True
+            return self.run()
+        #end
+
+        self._numTries = 0
+        self._isRun = True
+        return self._retcode
     #end
 #end
